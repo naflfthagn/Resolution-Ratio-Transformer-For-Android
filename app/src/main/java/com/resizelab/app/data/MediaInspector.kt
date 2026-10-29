@@ -44,13 +44,22 @@ class MediaInspector(private val context: Context) {
             throw MediaInspectionException(MediaInspectionFailure.UNSUPPORTED)
         }
 
+        val isGif = kind == MediaKind.IMAGE &&
+            (mime == "image/gif" || name.endsWith(".gif", ignoreCase = true))
+
         when (kind) {
-            MediaKind.IMAGE -> inspectImage(uri, name, mime, size)
+            MediaKind.IMAGE -> inspectImage(uri, name, mime, size, isGif)
             MediaKind.VIDEO -> inspectVideo(uri, name, mime, size)
         }
     }
 
-    private fun inspectImage(uri: Uri, name: String, mime: String?, size: Long): MediaInfo {
+    private fun inspectImage(
+        uri: Uri,
+        name: String,
+        mime: String?,
+        size: Long,
+        isGif: Boolean
+    ): MediaInfo {
         val bounds = readBitmapBounds(uri)
         val orientation = readOrientation(uri)
         val swapped = orientation == ExifInterface.ORIENTATION_TRANSPOSE ||
@@ -68,7 +77,8 @@ class MediaInspector(private val context: Context) {
             width = width,
             height = height,
             sizeBytes = size,
-            exifOrientation = orientation
+            exifOrientation = orientation,
+            isGif = isGif
         )
     }
 

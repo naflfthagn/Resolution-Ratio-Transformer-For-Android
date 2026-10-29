@@ -59,6 +59,42 @@ class MediaStoreSaver(private val context: Context) {
         }
     }
 
+    suspend fun saveGif(
+        sourceName: String,
+        width: Int,
+        height: Int,
+        write: suspend (OutputStream) -> Unit
+    ): ExportResult {
+        val fileName = buildOutputName(sourceName, width, height, "gif")
+        val entry = createEntry(MediaKind.IMAGE, "image/gif", fileName)
+        try {
+            val output = context.contentResolver.openOutputStream(entry.uri, "w")
+                ?: throw IOException("Unable to open MediaStore output")
+            try {
+                write(output)
+            } finally {
+                runCatching { output.close() }
+            }
+            publish(entry, "image/gif")
+            val saved = querySaved(entry)
+            val savedSize = saved.second.takeIf { it > 0L }
+                ?: entry.absolutePath?.let { path -> File(path).length() }
+                ?: 0L
+            return ExportResult(
+                uri = entry.uri,
+                kind = MediaKind.IMAGE,
+                mimeType = "image/gif",
+                displayName = saved.first ?: fileName,
+                width = width,
+                height = height,
+                sizeBytes = savedSize
+            )
+        } catch (throwable: Throwable) {
+            discard(entry)
+            throw throwable
+        }
+    }
+
     suspend fun saveVideo(
         tempFile: File,
         sourceName: String,
@@ -202,6 +238,9 @@ class MediaStoreSaver(private val context: Context) {
             ImageFormat.JPEG -> Bitmap.CompressFormat.JPEG
             ImageFormat.PNG -> Bitmap.CompressFormat.PNG
             ImageFormat.WEBP -> webpFormat()
+            ImageFormat.GIF -> throw IllegalArgumentException(
+                "Animated GIFs are written by GifResizer"
+            )
         }
     }
 

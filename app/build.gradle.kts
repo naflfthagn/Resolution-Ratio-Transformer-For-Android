@@ -22,8 +22,8 @@ android {
         applicationId = "com.resizelab.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "1.2.0"
+        versionCode = 6
+        versionName = "1.3.0"
 
         vectorDrawables {
             useSupportLibrary = true
@@ -108,6 +108,7 @@ dependencies {
     implementation("androidx.media3:media3-ui:1.5.1")
     implementation("androidx.media3:media3-transformer:1.5.1")
     implementation("androidx.media3:media3-effect:1.5.1")
+    implementation("pl.droidsonroids.gif:android-gif-drawable:1.2.32")
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 

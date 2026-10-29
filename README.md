@@ -6,6 +6,7 @@
 
 - 通过系统**文件选择器（Storage Access Framework）**选择一张图片或一段视频，无需授予整个相册的访问权限。
 - **图片改分辨率**：支持 JPEG、PNG、WebP 输出；按长边规格或自定义宽高缩放；可选适应、居中裁剪、拉伸三种画面布局；JPEG / WebP 支持质量调节。
+- **GIF 动图缩放**：导入 GIF 后默认按 GIF 导出，逐帧调整分辨率并保留动画帧时长、循环次数和透明区域；编辑页提供动画预览。
 - **视频改分辨率**：基于 AndroidX Media3 Transformer 重新编码为 H.264 + AAC MP4，保留音轨；支持 4K / 2K / 1080P / 720P / 480P 与自定义尺寸。
 - **声音清晰度**：视频导出时可选自动（保留原音轨）、96 / 128 / 192 / 256 / 320 kbps AAC 码率；手动码率会强制重新编码音轨，码率越高通常声音细节越多、文件越大。
 - 自动校正图片 EXIF 方向、视频旋转元数据；视频宽高自动取整为偶数。
@@ -22,14 +23,21 @@
 仓库的 `dist/` 目录包含已签名的 release APK：
 
 ```bash
-adb install -r dist/ResizeLab-1.2.0.apk
+adb install -r dist/ResizeLab-1.3.0.apk
 ```
 
 也可以把 APK 传到手机上，在文件管理器中允许“安装未知应用”后打开安装。安装包使用本地 release keystore 签名；如需上架应用商店，请替换为自己的正式签名并妥善保管密钥。
 
-`dist/SHA256SUMS.txt` 提供 APK 与源码包的 SHA-256 校验值。`dist/ResizeLab-1.2.0-source.zip` 是移除了本机构建缓存、`local.properties` 和签名密钥的完整工程源码。
+`dist/SHA256SUMS.txt` 提供 APK 与源码包的 SHA-256 校验值。`dist/ResizeLab-1.3.0-source.zip` 是移除了本机构建缓存、`local.properties` 和签名密钥的完整工程源码。
 
 ## 更新记录
+
+### 1.3.0
+
+- 新增 GIF 动图缩放：导入 GIF 后自动选择 GIF 输出，逐帧缩放并重新编码。
+- 保留原始帧时长、循环次数和透明区域；提供 GIF 动画预览。
+- GIF 使用专用逐帧处理管线，不会像普通图片一样只导出首帧。
+- 新增 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)，记录 GIF 解码与编码依赖。
 
 ### 1.2.0
 

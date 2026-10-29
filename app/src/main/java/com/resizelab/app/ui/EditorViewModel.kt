@@ -17,6 +17,8 @@ import com.resizelab.app.data.MediaInspector
 import com.resizelab.app.data.MediaKind
 import com.resizelab.app.data.ResolutionPreset
 import com.resizelab.app.data.ResizeMode
+import com.resizelab.app.media.GifProcessingException
+import com.resizelab.app.media.GifResizer
 import com.resizelab.app.media.ImageDecodeException
 import com.resizelab.app.media.ImageResizeRequest
 import com.resizelab.app.media.ImageResizer
@@ -43,6 +45,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private val saver = MediaStoreSaver(application)
     private val sourceCache = MediaSourceCache(application)
     private val imageResizer = ImageResizer(application, saver)
+    private val gifResizer = GifResizer(application, saver)
     private val videoResizer = VideoResizer(application, saver)
     private var cachedSourceFile: File? = null
 
@@ -95,6 +98,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 if (isVideo) target = target.toEven()
                 val initialFormat = when {
                     isVideo -> ImageFormat.JPEG
+                    info.isGif -> ImageFormat.GIF
                     info.mimeType == "image/png" -> ImageFormat.PNG
                     info.mimeType == "image/webp" -> ImageFormat.WEBP
                     else -> ImageFormat.JPEG
@@ -268,6 +272,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun setImageFormat(format: ImageFormat) {
         val current = _uiState.value
         if (current.isExporting) return
+        val isGif = current.media?.isGif == true
+        if ((isGif && format != ImageFormat.GIF) || (!isGif && format == ImageFormat.GIF)) {
+            return
+        }
         _uiState.value = current.copy(
             imageFormat = format,
             exportStatus = current.clearedFeedback()
@@ -357,6 +365,18 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     ) { progress, stage ->
                         updateProgress(progress, stage)
                     }
+                } else if (media.isGif) {
+                    gifResizer.resize(
+                        media,
+                        ImageResizeRequest(
+                            target = target,
+                            mode = mode,
+                            format = ImageFormat.GIF,
+                            quality = quality
+                        )
+                    ) { progress, stage ->
+                        updateProgress(progress, stage)
+                    }
                 } else {
                     imageResizer.resize(
                         media,
@@ -442,6 +462,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private fun exportErrorMessage(error: Throwable, isVideo: Boolean): String {
         return when (error) {
             is OutOfMemoryError -> app.getString(R.string.error_out_of_memory)
+            is GifProcessingException -> app.getString(R.string.error_gif_export)
             is ImageDecodeException -> app.getString(R.string.error_decode_image)
             is ExportException -> app.getString(R.string.error_video_export)
             is SecurityException -> app.getString(R.string.error_save)

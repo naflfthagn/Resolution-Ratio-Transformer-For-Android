@@ -7,12 +7,12 @@
     <string name="home_title">调整分辨率</string>
     <string name="home_subtitle">选择一张图片或一段视频，设置目标尺寸后保存到相册。</string>
     <string name="home_pick">选择图片或视频</string>
-    <string name="home_pick_hint">支持 JPG、PNG、HEIC、MP4、MOV</string>
+    <string name="home_pick_hint">支持 JPG、PNG、GIF、HEIC、MP4、MOV</string>
     <string name="home_footer">本机处理 · 素材不会上传</string>
     <string name="home_header_tagline">图片 · 视频 · 本地处理</string>
     <string name="home_help_title">功能与使用说明</string>
     <string name="home_help_export_label">导出</string>
-    <string name="home_help_image_body">自定义尺寸与格式，支持适应、裁剪、拉伸</string>
+    <string name="home_help_image_body">静态图与 GIF 动图，可调整尺寸与画面适配</string>
     <string name="home_help_video_body">调整分辨率，并可修改声音码率</string>
     <string name="home_help_export_body">保存到 Pictures/ResizeLab 或 Movies/ResizeLab</string>
     <string name="loading_media">正在读取素材…</string>
@@ -59,6 +59,12 @@
     <string name="mode_crop_desc">居中裁剪，不留边</string>
     <string name="mode_stretch">拉伸</string>
     <string name="mode_stretch_desc">铺满画布，比例变化</string>
+    <string name="format_gif">GIF</string>
+    <string name="source_gif">GIF</string>
+    <string name="gif_preview_desc">GIF 动图预览</string>
+    <string name="gif_settings_title">GIF 动图</string>
+    <string name="gif_settings_desc">逐帧缩放后重新编码，保留动画、帧时长和循环次数。</string>
+    <string name="error_gif_export">GIF 导出失败。请确认文件是有效的动图，并检查存储空间。</string>
     <string name="format_section">图片格式</string>
     <string name="format_jpeg">JPEG</string>
     <string name="format_png">PNG</string>

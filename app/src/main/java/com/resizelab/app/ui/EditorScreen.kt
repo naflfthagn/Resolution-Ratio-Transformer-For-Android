@@ -4,6 +4,7 @@ package com.resizelab.app.ui
 
 import android.net.Uri
 import android.view.ViewGroup
+import android.widget.ImageView
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
@@ -116,6 +117,8 @@ import com.resizelab.app.util.ResolutionMath
 import com.resizelab.app.util.formatBytes
 import com.resizelab.app.util.formatDuration
 import com.resizelab.app.util.formatTypeLabel
+import pl.droidsonroids.gif.GifDrawable
+import java.io.File
 import kotlin.math.roundToInt
 
 @Composable
@@ -239,7 +242,11 @@ private fun isTargetValid(state: EditorUiState): Boolean {
 private fun PreviewSection(media: MediaInfo, isExporting: Boolean) {
     val colors = MaterialTheme.colorScheme
     val typeLabel = stringResource(
-        if (media.kind == MediaKind.IMAGE) R.string.source_image else R.string.source_video
+        when {
+            media.isGif -> R.string.source_gif
+            media.kind == MediaKind.IMAGE -> R.string.source_image
+            else -> R.string.source_video
+        }
     )
     val summary = buildString {
         append(formatTypeLabel(media))
@@ -266,6 +273,7 @@ private fun PreviewSection(media: MediaInfo, isExporting: Boolean) {
         ) {
             Box(Modifier.fillMaxSize()) {
                 when {
+                    media.isGif -> GifPreview(media)
                     media.kind == MediaKind.IMAGE -> ImagePreview(media)
                     !isExporting -> VideoPreview(media.uri)
                     else -> PausedVideoPreview()
@@ -327,6 +335,59 @@ private fun PreviewTag(text: String, modifier: Modifier = Modifier) {
             fontFamily = FontFamily.Monospace
         )
     }
+}
+
+@Composable
+private fun GifPreview(media: MediaInfo) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val description = stringResource(R.string.gif_preview_desc)
+    val drawable = remember(media.uri) {
+        runCatching {
+            if (media.uri.scheme == "file") {
+                val path = media.uri.path ?: return@runCatching null
+                GifDrawable(File(path))
+            } else {
+                GifDrawable(context.contentResolver, media.uri)
+            }
+        }.getOrNull()
+    }
+    if (drawable == null) {
+        ImagePreview(media)
+        return
+    }
+    DisposableEffect(lifecycleOwner, drawable) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_STOP -> drawable.stop()
+                Lifecycle.Event.ON_START -> drawable.start()
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            drawable.stop()
+            drawable.recycle()
+        }
+    }
+    AndroidView(
+        factory = { viewContext ->
+            ImageView(viewContext).apply {
+                layoutParams = ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                setBackgroundColor(android.graphics.Color.BLACK)
+                setImageDrawable(drawable)
+            }
+        },
+        update = { view -> view.setImageDrawable(drawable) },
+        modifier = Modifier
+            .fillMaxSize()
+            .semantics { contentDescription = description }
+    )
 }
 
 @Composable
@@ -670,7 +731,7 @@ private fun ExportSettingsCard(
     val colors = MaterialTheme.colorScheme
     val enabled = !state.isExporting
     val summary = if (media.kind == MediaKind.IMAGE) {
-        if (state.imageFormat.isLossy) {
+        if (state.imageFormat.supportsQuality) {
             stringResource(
                 R.string.settings_image_summary,
                 formatLabel(state.imageFormat),
@@ -711,6 +772,7 @@ private fun ExportSettingsCard(
                     ImageSettings(
                         format = state.imageFormat,
                         quality = state.quality,
+                        isGifSource = media.isGif,
                         enabled = enabled,
                         onFormatSelected = onFormatSelected,
                         onQualityChange = onQualityChange
@@ -732,11 +794,26 @@ private fun ExportSettingsCard(
 private fun ImageSettings(
     format: ImageFormat,
     quality: Int,
+    isGifSource: Boolean,
     enabled: Boolean,
     onFormatSelected: (ImageFormat) -> Unit,
     onQualityChange: (Int) -> Unit
 ) {
     val colors = MaterialTheme.colorScheme
+    if (isGifSource) {
+        Text(
+            text = stringResource(R.string.gif_settings_title),
+            style = MaterialTheme.typography.labelMedium,
+            color = colors.onSurfaceVariant
+        )
+        Spacer(Modifier.height(7.dp))
+        Text(
+            text = stringResource(R.string.gif_settings_desc),
+            style = MaterialTheme.typography.bodySmall,
+            color = colors.onSurfaceVariant
+        )
+        return
+    }
     Text(
         text = stringResource(R.string.format_section),
         style = MaterialTheme.typography.labelMedium,
@@ -747,17 +824,19 @@ private fun ImageSettings(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        ImageFormat.entries.forEach { candidate ->
-            AppChoice(
-                label = formatLabel(candidate),
-                selected = format == candidate,
-                enabled = enabled,
-                onClick = { onFormatSelected(candidate) },
-                modifier = Modifier.weight(1f)
-            )
-        }
+        ImageFormat.entries
+            .filter { it != ImageFormat.GIF }
+            .forEach { candidate ->
+                AppChoice(
+                    label = formatLabel(candidate),
+                    selected = format == candidate,
+                    enabled = enabled,
+                    onClick = { onFormatSelected(candidate) },
+                    modifier = Modifier.weight(1f)
+                )
+            }
     }
-    if (format.isLossy) {
+    if (format.supportsQuality) {
         Spacer(Modifier.height(14.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1092,6 +1171,7 @@ private fun formatLabel(format: ImageFormat): String {
             ImageFormat.JPEG -> R.string.format_jpeg
             ImageFormat.PNG -> R.string.format_png
             ImageFormat.WEBP -> R.string.format_webp
+            ImageFormat.GIF -> R.string.format_gif
         }
     )
 }

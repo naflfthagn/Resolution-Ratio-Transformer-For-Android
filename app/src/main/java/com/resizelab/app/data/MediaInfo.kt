@@ -19,7 +19,8 @@ data class MediaInfo(
     val durationMs: Long? = null,
     val rotationDegrees: Int = 0,
     val hasAudio: Boolean = false,
-    val exifOrientation: Int = 1
+    val exifOrientation: Int = 1,
+    val isGif: Boolean = false
 ) {
     val aspectRatio: Float
         get() = if (height > 0) width.toFloat() / height else 1f

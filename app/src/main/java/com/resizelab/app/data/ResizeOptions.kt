@@ -19,10 +19,14 @@ enum class ResolutionPreset(val longEdge: Int?) {
 enum class ImageFormat(val mimeType: String, val extension: String) {
     JPEG("image/jpeg", "jpg"),
     PNG("image/png", "png"),
-    WEBP("image/webp", "webp");
+    WEBP("image/webp", "webp"),
+    GIF("image/gif", "gif");
 
     val isLossy: Boolean
         get() = this != PNG
+
+    val supportsQuality: Boolean
+        get() = this == JPEG || this == WEBP
 }
 
 enum class AudioQuality(val bitrate: Int?) {
