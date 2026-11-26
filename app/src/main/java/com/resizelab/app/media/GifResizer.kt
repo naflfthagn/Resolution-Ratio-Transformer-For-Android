@@ -8,10 +8,12 @@ import android.graphics.RectF
 import androidx.core.graphics.createBitmap
 import com.resizelab.app.data.ExportResult
 import com.resizelab.app.data.ExportStage
+import com.resizelab.app.data.GifSpeed
 import com.resizelab.app.data.MediaInfo
 import com.resizelab.app.data.MediaKind
 import com.resizelab.app.data.ResizeMode
 import com.resizelab.app.gifencoder.AnimatedGifEncoder
+import com.resizelab.app.util.GifTiming
 import com.resizelab.app.util.ResolutionMath
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -33,6 +35,7 @@ class GifResizer(
     suspend fun resize(
         mediaInfo: MediaInfo,
         request: ImageResizeRequest,
+        speed: GifSpeed,
         onProgress: (Float, ExportStage) -> Unit
     ): ExportResult = withContext(Dispatchers.IO) {
         require(mediaInfo.kind == MediaKind.IMAGE && mediaInfo.isGif)
@@ -82,7 +85,12 @@ class GifResizer(
                     activeDecoder.seekToFrame(index, activeSourceFrame)
                     val resizedFrame = renderFrame(activeSourceFrame, request)
                     try {
-                        encoder.setDelay(normalizeDelay(activeDecoder.getFrameDuration(index)))
+                        encoder.setDelay(
+                            GifTiming.scaleDelayMs(
+                                activeDecoder.getFrameDuration(index),
+                                speed.multiplier
+                            )
+                        )
                         if (!encoder.addFrame(resizedFrame)) {
                             throw GifProcessingException("Unable to encode GIF frame")
                         }
@@ -144,9 +152,6 @@ class GifResizer(
         return output
     }
 
-    private fun normalizeDelay(durationMs: Int): Int {
-        return if (durationMs <= 0) 100 else durationMs.coerceIn(10, 60_000)
-    }
 
     private companion object {
         const val GIF_COLOR_QUALITY = 10

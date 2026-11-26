@@ -40,3 +40,15 @@ enum class AudioQuality(val bitrate: Int?) {
     val kbps: Int?
         get() = bitrate?.div(1000)
 }
+
+enum class GifSpeed(val multiplier: Float) {
+    HALF(0.5f),
+    NORMAL(1f),
+    ONE_AND_HALF(1.5f),
+    DOUBLE(2f)
+}
+
+enum class GifOutputFormat {
+    GIF,
+    MP4
+}

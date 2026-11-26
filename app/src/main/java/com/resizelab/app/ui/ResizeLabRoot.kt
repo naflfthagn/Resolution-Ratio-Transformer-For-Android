@@ -176,6 +176,8 @@ fun ResizeLabRoot(viewModel: EditorViewModel) {
                 onFormatSelected = viewModel::setImageFormat,
                 onQualityChange = viewModel::setQuality,
                 onAudioQualitySelected = viewModel::setAudioQuality,
+                onGifSpeedSelected = viewModel::setGifSpeed,
+                onGifOutputSelected = viewModel::setGifOutputFormat,
                 onExport = requestExport,
                 onCancelExport = viewModel::cancelExport,
                 onOpenResult = openResult,

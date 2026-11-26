@@ -61,10 +61,12 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -98,6 +100,8 @@ import com.resizelab.app.R
 import com.resizelab.app.data.AudioQuality
 import com.resizelab.app.data.ExportResult
 import com.resizelab.app.data.ExportStage
+import com.resizelab.app.data.GifOutputFormat
+import com.resizelab.app.data.GifSpeed
 import com.resizelab.app.data.ImageFormat
 import com.resizelab.app.data.MediaInfo
 import com.resizelab.app.data.MediaKind
@@ -134,6 +138,8 @@ fun EditorScreen(
     onFormatSelected: (ImageFormat) -> Unit,
     onQualityChange: (Int) -> Unit,
     onAudioQualitySelected: (AudioQuality) -> Unit,
+    onGifSpeedSelected: (GifSpeed) -> Unit,
+    onGifOutputSelected: (GifOutputFormat) -> Unit,
     onExport: () -> Unit,
     onCancelExport: () -> Unit,
     onOpenResult: (ExportResult) -> Unit,
@@ -196,7 +202,11 @@ fun EditorScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
-                PreviewSection(media = media, isExporting = state.isExporting)
+                PreviewSection(
+                    media = media,
+                    isExporting = state.isExporting,
+                    gifSpeed = state.gifSpeed
+                )
             }
             item {
                 ResolutionCard(
@@ -215,7 +225,9 @@ fun EditorScreen(
                     onToggle = { settingsExpanded = !settingsExpanded },
                     onFormatSelected = onFormatSelected,
                     onQualityChange = onQualityChange,
-                    onAudioQualitySelected = onAudioQualitySelected
+                    onAudioQualitySelected = onAudioQualitySelected,
+                    onGifSpeedSelected = onGifSpeedSelected,
+                    onGifOutputSelected = onGifOutputSelected
                 )
             }
             item {
@@ -235,11 +247,15 @@ fun EditorScreen(
 
 private fun isTargetValid(state: EditorUiState): Boolean {
     val target = state.targetSize ?: return false
-    return ResolutionMath.validateTarget(target, state.isVideo) == null
+    return ResolutionMath.validateTarget(target, state.isVideoOutput) == null
 }
 
 @Composable
-private fun PreviewSection(media: MediaInfo, isExporting: Boolean) {
+private fun PreviewSection(
+    media: MediaInfo,
+    isExporting: Boolean,
+    gifSpeed: GifSpeed
+) {
     val colors = MaterialTheme.colorScheme
     val typeLabel = stringResource(
         when {
@@ -273,7 +289,7 @@ private fun PreviewSection(media: MediaInfo, isExporting: Boolean) {
         ) {
             Box(Modifier.fillMaxSize()) {
                 when {
-                    media.isGif -> GifPreview(media)
+                    media.isGif -> GifPreview(media, gifSpeed.multiplier)
                     media.kind == MediaKind.IMAGE -> ImagePreview(media)
                     !isExporting -> VideoPreview(media.uri)
                     else -> PausedVideoPreview()
@@ -338,7 +354,7 @@ private fun PreviewTag(text: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun GifPreview(media: MediaInfo) {
+private fun GifPreview(media: MediaInfo, speedMultiplier: Float) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val description = stringResource(R.string.gif_preview_desc)
@@ -356,11 +372,18 @@ private fun GifPreview(media: MediaInfo) {
         ImagePreview(media)
         return
     }
+    val currentSpeed by rememberUpdatedState(speedMultiplier)
+    LaunchedEffect(drawable, speedMultiplier) {
+        drawable.setSpeed(speedMultiplier)
+    }
     DisposableEffect(lifecycleOwner, drawable) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_STOP -> drawable.stop()
-                Lifecycle.Event.ON_START -> drawable.start()
+                Lifecycle.Event.ON_START -> {
+                    drawable.setSpeed(currentSpeed)
+                    drawable.start()
+                }
                 else -> Unit
             }
         }
@@ -502,7 +525,7 @@ private fun ResolutionCard(
     val media = state.media ?: return
     val enabled = !state.isExporting
     val target = state.targetSize
-    val maxDimension = ResolutionMath.maxDimension(state.isVideo)
+    val maxDimension = ResolutionMath.maxDimension(state.isVideoOutput)
     val sizeError = when {
         target == null -> stringResource(R.string.error_empty_size)
         target.width < ResolutionMath.MIN_DIMENSION ||
@@ -513,7 +536,7 @@ private fun ResolutionCard(
             ResolutionMath.MIN_DIMENSION,
             maxDimension
         )
-        !state.isVideo &&
+        !state.isVideoOutput &&
             target.width.toLong() * target.height > ResolutionMath.MAX_IMAGE_PIXELS ->
             stringResource(
                 R.string.error_pixel_limit,
@@ -616,7 +639,7 @@ private fun ResolutionCard(
                     style = MaterialTheme.typography.labelSmall,
                     color = colors.error
                 )
-            } else if (state.isVideo) {
+            } else if (state.isVideoOutput) {
                 Spacer(Modifier.height(4.dp))
                 Text(
                     text = stringResource(R.string.video_even_hint),
@@ -725,32 +748,41 @@ private fun ExportSettingsCard(
     onToggle: () -> Unit,
     onFormatSelected: (ImageFormat) -> Unit,
     onQualityChange: (Int) -> Unit,
-    onAudioQualitySelected: (AudioQuality) -> Unit
+    onAudioQualitySelected: (AudioQuality) -> Unit,
+    onGifSpeedSelected: (GifSpeed) -> Unit,
+    onGifOutputSelected: (GifOutputFormat) -> Unit
 ) {
     val media = state.media ?: return
     val colors = MaterialTheme.colorScheme
     val enabled = !state.isExporting
     val summary = if (media.kind == MediaKind.IMAGE) {
-        if (state.imageFormat.supportsQuality) {
-            stringResource(
+        when {
+            media.isGif && state.gifOutputFormat == GifOutputFormat.MP4 -> stringResource(
+                R.string.settings_gif_video_summary,
+                gifSpeedLabel(state.gifSpeed)
+            )
+            media.isGif -> stringResource(
+                R.string.settings_gif_summary,
+                gifSpeedLabel(state.gifSpeed)
+            )
+            state.imageFormat.supportsQuality -> stringResource(
                 R.string.settings_image_summary,
                 formatLabel(state.imageFormat),
                 state.quality
             )
-        } else {
-            formatLabel(state.imageFormat)
+            else -> formatLabel(state.imageFormat)
         }
     } else {
-        if (!media.hasAudio) {
-            stringResource(R.string.settings_no_audio)
-        } else if (state.audioQuality == AudioQuality.AUTO) {
-            stringResource(R.string.settings_audio_auto)
-        } else {
-            stringResource(
+        val audioSummary = when {
+            !media.hasAudio -> stringResource(R.string.settings_no_audio)
+            state.audioQuality == AudioQuality.AUTO ->
+                stringResource(R.string.settings_audio_auto)
+            else -> stringResource(
                 R.string.settings_audio_manual,
                 state.audioQuality.kbps ?: 0
             )
         }
+        stringResource(R.string.settings_video_summary, audioSummary)
     }
 
     AppCard {
@@ -773,11 +805,17 @@ private fun ExportSettingsCard(
                         format = state.imageFormat,
                         quality = state.quality,
                         isGifSource = media.isGif,
+                        gifSpeed = state.gifSpeed,
+                        gifOutputFormat = state.gifOutputFormat,
                         enabled = enabled,
                         onFormatSelected = onFormatSelected,
-                        onQualityChange = onQualityChange
+                        onQualityChange = onQualityChange,
+                        onGifSpeedSelected = onGifSpeedSelected,
+                        onGifOutputSelected = onGifOutputSelected
                     )
                 } else {
+                    VideoFormatRow()
+                    Spacer(Modifier.height(14.dp))
                     VideoAudioSettings(
                         media = media,
                         selected = state.audioQuality,
@@ -795,21 +833,78 @@ private fun ImageSettings(
     format: ImageFormat,
     quality: Int,
     isGifSource: Boolean,
+    gifSpeed: GifSpeed,
+    gifOutputFormat: GifOutputFormat,
     enabled: Boolean,
     onFormatSelected: (ImageFormat) -> Unit,
-    onQualityChange: (Int) -> Unit
+    onQualityChange: (Int) -> Unit,
+    onGifSpeedSelected: (GifSpeed) -> Unit,
+    onGifOutputSelected: (GifOutputFormat) -> Unit
 ) {
     val colors = MaterialTheme.colorScheme
     if (isGifSource) {
         Text(
-            text = stringResource(R.string.gif_settings_title),
+            text = stringResource(R.string.output_format_label),
             style = MaterialTheme.typography.labelMedium,
             color = colors.onSurfaceVariant
         )
         Spacer(Modifier.height(7.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            AppChoice(
+                label = stringResource(R.string.gif_output_gif),
+                selected = gifOutputFormat == GifOutputFormat.GIF,
+                enabled = enabled,
+                onClick = { onGifOutputSelected(GifOutputFormat.GIF) },
+                modifier = Modifier.weight(1f)
+            )
+            AppChoice(
+                label = stringResource(R.string.gif_output_mp4),
+                selected = gifOutputFormat == GifOutputFormat.MP4,
+                enabled = enabled,
+                onClick = { onGifOutputSelected(GifOutputFormat.MP4) },
+                modifier = Modifier.weight(1f)
+            )
+        }
+        Spacer(Modifier.height(10.dp))
         Text(
-            text = stringResource(R.string.gif_settings_desc),
+            text = stringResource(
+                if (gifOutputFormat == GifOutputFormat.MP4) {
+                    R.string.gif_video_settings_desc
+                } else {
+                    R.string.gif_settings_desc
+                }
+            ),
             style = MaterialTheme.typography.bodySmall,
+            color = colors.onSurfaceVariant
+        )
+        Spacer(Modifier.height(14.dp))
+        Text(
+            text = stringResource(R.string.gif_speed_label),
+            style = MaterialTheme.typography.labelMedium,
+            color = colors.onSurfaceVariant
+        )
+        Spacer(Modifier.height(7.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            GifSpeed.entries.forEach { speed ->
+                AppChoice(
+                    label = gifSpeedLabel(speed),
+                    selected = gifSpeed == speed,
+                    enabled = enabled,
+                    onClick = { onGifSpeedSelected(speed) },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = stringResource(R.string.gif_speed_hint),
+            style = MaterialTheme.typography.labelSmall,
             color = colors.onSurfaceVariant
         )
         return
@@ -873,6 +968,49 @@ private fun ImageSettings(
             style = MaterialTheme.typography.labelSmall,
             color = colors.onSurfaceVariant
         )
+    }
+}
+
+@Composable
+private fun VideoFormatRow() {
+    val colors = MaterialTheme.colorScheme
+    Text(
+        text = stringResource(R.string.output_format_label),
+        style = MaterialTheme.typography.labelMedium,
+        color = colors.onSurfaceVariant
+    )
+    Spacer(Modifier.height(7.dp))
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = AppControlShape,
+        color = colors.surfaceVariant.copy(alpha = 0.30f),
+        border = BorderStroke(1.dp, colors.outlineVariant)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Movie,
+                contentDescription = null,
+                tint = colors.primary,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = stringResource(R.string.video_format_mp4),
+                style = MaterialTheme.typography.labelMedium,
+                color = colors.onSurface,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = stringResource(R.string.video_codec_h264),
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.onSurfaceVariant
+            )
+        }
     }
 }
 
@@ -974,10 +1112,10 @@ private fun ExportSection(
                 text = stringResource(
                     R.string.output_save_to,
                     stringResource(
-                        if (media.kind == MediaKind.IMAGE) {
-                            R.string.export_location_images
-                        } else {
+                        if (state.isVideoOutput) {
                             R.string.export_location_videos
+                        } else {
+                            R.string.export_location_images
                         }
                     )
                 ),
@@ -1172,6 +1310,18 @@ private fun formatLabel(format: ImageFormat): String {
             ImageFormat.PNG -> R.string.format_png
             ImageFormat.WEBP -> R.string.format_webp
             ImageFormat.GIF -> R.string.format_gif
+        }
+    )
+}
+
+@Composable
+private fun gifSpeedLabel(speed: GifSpeed): String {
+    return stringResource(
+        when (speed) {
+            GifSpeed.HALF -> R.string.gif_speed_half
+            GifSpeed.NORMAL -> R.string.gif_speed_normal
+            GifSpeed.ONE_AND_HALF -> R.string.gif_speed_one_and_half
+            GifSpeed.DOUBLE -> R.string.gif_speed_double
         }
     )
 }

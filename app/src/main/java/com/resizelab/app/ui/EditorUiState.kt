@@ -3,6 +3,8 @@ package com.resizelab.app.ui
 import com.resizelab.app.data.AudioQuality
 import com.resizelab.app.data.ExportResult
 import com.resizelab.app.data.ExportStage
+import com.resizelab.app.data.GifOutputFormat
+import com.resizelab.app.data.GifSpeed
 import com.resizelab.app.data.ImageFormat
 import com.resizelab.app.data.MediaInfo
 import com.resizelab.app.data.MediaKind
@@ -26,6 +28,8 @@ data class EditorUiState(
     val mode: ResizeMode = ResizeMode.FIT,
     val imageFormat: ImageFormat = ImageFormat.JPEG,
     val audioQuality: AudioQuality = AudioQuality.AUTO,
+    val gifSpeed: GifSpeed = GifSpeed.NORMAL,
+    val gifOutputFormat: GifOutputFormat = GifOutputFormat.GIF,
     val quality: Int = 92,
     val exportStatus: ExportStatus = ExportStatus.Idle
 ) {
@@ -44,6 +48,9 @@ data class EditorUiState(
 
     val isVideo: Boolean
         get() = media?.kind == MediaKind.VIDEO
+
+    val isVideoOutput: Boolean
+        get() = isVideo || (media?.isGif == true && gifOutputFormat == GifOutputFormat.MP4)
 
     val isExporting: Boolean
         get() = exportStatus is ExportStatus.Running
