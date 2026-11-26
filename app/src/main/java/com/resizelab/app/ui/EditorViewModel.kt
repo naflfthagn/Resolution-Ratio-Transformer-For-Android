@@ -19,6 +19,7 @@ import com.resizelab.app.data.MediaInspector
 import com.resizelab.app.data.MediaKind
 import com.resizelab.app.data.ResolutionPreset
 import com.resizelab.app.data.ResizeMode
+import com.resizelab.app.data.VideoOutputFormat
 import com.resizelab.app.media.GifProcessingException
 import com.resizelab.app.media.GifResizer
 import com.resizelab.app.media.GifVideoProcessingException
@@ -28,6 +29,8 @@ import com.resizelab.app.media.ImageResizeRequest
 import com.resizelab.app.media.ImageResizer
 import com.resizelab.app.media.MediaSourceCache
 import com.resizelab.app.media.MediaStoreSaver
+import com.resizelab.app.media.VideoGifProcessingException
+import com.resizelab.app.media.VideoGifResizer
 import com.resizelab.app.media.VideoResizer
 import com.resizelab.app.util.PixelSize
 import com.resizelab.app.util.ResolutionMath
@@ -51,6 +54,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private val imageResizer = ImageResizer(application, saver)
     private val gifResizer = GifResizer(application, saver)
     private val gifVideoResizer = GifVideoResizer(application, saver)
+    private val videoGifResizer = VideoGifResizer(application, saver)
     private val videoResizer = VideoResizer(application, saver)
     private var cachedSourceFile: File? = null
 
@@ -139,8 +143,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val current = _uiState.value
         val media = current.media ?: return
         if (current.isExporting) return
-        val isVideoOutput = current.isVideoOutput
-        val maxDimension = ResolutionMath.maxDimension(isVideoOutput)
+        val hasVideoDimensions = current.hasVideoDimensions
+        val maxDimension = ResolutionMath.maxDimension(hasVideoDimensions)
         val digits = rawValue.filter { it.isDigit() }.take(5)
         val parsed = digits.toIntOrNull()
         val widthText = if (parsed != null && parsed > maxDimension) {
@@ -156,9 +160,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         if (next.lockAspect) {
             val width = widthText.toIntOrNull()
             if (width != null && width > 0) {
-                val derived = ResolutionMath.sizeForWidth(media.sourceSize, width, isVideoOutput)
+                val derived = ResolutionMath.sizeForWidth(media.sourceSize, width, hasVideoDimensions)
                 if (derived.height > maxDimension) {
-                    val clamped = ResolutionMath.clampToMax(derived, isVideoOutput)
+                    val clamped = ResolutionMath.clampToMax(derived, hasVideoDimensions)
                     next = next.copy(
                         widthText = clamped.width.toString(),
                         heightText = clamped.height.toString()
@@ -175,8 +179,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val current = _uiState.value
         val media = current.media ?: return
         if (current.isExporting) return
-        val isVideoOutput = current.isVideoOutput
-        val maxDimension = ResolutionMath.maxDimension(isVideoOutput)
+        val hasVideoDimensions = current.hasVideoDimensions
+        val maxDimension = ResolutionMath.maxDimension(hasVideoDimensions)
         val digits = rawValue.filter { it.isDigit() }.take(5)
         val parsed = digits.toIntOrNull()
         val heightText = if (parsed != null && parsed > maxDimension) {
@@ -192,9 +196,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         if (next.lockAspect) {
             val height = heightText.toIntOrNull()
             if (height != null && height > 0) {
-                val derived = ResolutionMath.sizeForHeight(media.sourceSize, height, isVideoOutput)
+                val derived = ResolutionMath.sizeForHeight(media.sourceSize, height, hasVideoDimensions)
                 if (derived.width > maxDimension) {
-                    val clamped = ResolutionMath.clampToMax(derived, isVideoOutput)
+                    val clamped = ResolutionMath.clampToMax(derived, hasVideoDimensions)
                     next = next.copy(
                         widthText = clamped.width.toString(),
                         heightText = clamped.height.toString()
@@ -211,18 +215,18 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val current = _uiState.value
         val media = current.media ?: return
         if (current.isExporting || preset == ResolutionPreset.CUSTOM) return
-        val isVideoOutput = current.isVideoOutput
+        val hasVideoDimensions = current.hasVideoDimensions
         val rawTarget = when (preset) {
             ResolutionPreset.ORIGINAL -> media.sourceSize
             ResolutionPreset.CUSTOM -> return
             else -> ResolutionMath.sizeForLongEdge(
                 media.sourceSize,
                 preset.longEdge ?: return,
-                isVideoOutput
+                hasVideoDimensions
             )
         }
-        var target = ResolutionMath.clampToMax(rawTarget, isVideoOutput)
-        if (isVideoOutput) target = target.toEven()
+        var target = ResolutionMath.clampToMax(rawTarget, hasVideoDimensions)
+        if (hasVideoDimensions) target = target.toEven()
         _uiState.value = current.copy(
             widthText = target.width.toString(),
             heightText = target.height.toString(),
@@ -242,12 +246,12 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             )
             val width = current.width
             val height = current.height
-            val isVideoOutput = current.isVideoOutput
-            val maxDimension = ResolutionMath.maxDimension(isVideoOutput)
+            val hasVideoDimensions = current.hasVideoDimensions
+            val maxDimension = ResolutionMath.maxDimension(hasVideoDimensions)
             if (width != null && width > 0) {
-                val derived = ResolutionMath.sizeForWidth(media.sourceSize, width, isVideoOutput)
+                val derived = ResolutionMath.sizeForWidth(media.sourceSize, width, hasVideoDimensions)
                 if (derived.height > maxDimension) {
-                    val clamped = ResolutionMath.clampToMax(derived, isVideoOutput)
+                    val clamped = ResolutionMath.clampToMax(derived, hasVideoDimensions)
                     next = next.copy(
                         widthText = clamped.width.toString(),
                         heightText = clamped.height.toString()
@@ -256,7 +260,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     next = next.copy(heightText = derived.height.toString())
                 }
             } else if (height != null && height > 0) {
-                val derived = ResolutionMath.sizeForHeight(media.sourceSize, height, isVideoOutput)
+                val derived = ResolutionMath.sizeForHeight(media.sourceSize, height, hasVideoDimensions)
                 next = next.copy(widthText = derived.width.toString())
             }
             _uiState.value = next
@@ -333,6 +337,15 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         _uiState.value = next
     }
 
+    fun setVideoOutputFormat(format: VideoOutputFormat) {
+        val current = _uiState.value
+        if (current.isExporting || !current.isVideo) return
+        _uiState.value = current.copy(
+            videoOutputFormat = format,
+            exportStatus = current.clearedFeedback()
+        )
+    }
+
     fun startExport() {
         val current = _uiState.value
         val media = current.media ?: return
@@ -346,9 +359,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
 
         val isVideo = current.isVideo
-        val isVideoOutput = current.isVideoOutput
+        val hasVideoDimensions = current.hasVideoDimensions
         var target = PixelSize(width, height)
-        val maxDimension = ResolutionMath.maxDimension(isVideoOutput)
+        val maxDimension = ResolutionMath.maxDimension(hasVideoDimensions)
         if (target.width < ResolutionMath.MIN_DIMENSION ||
             target.height < ResolutionMath.MIN_DIMENSION ||
             target.width > maxDimension ||
@@ -363,7 +376,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             )
             return
         }
-        if (!isVideoOutput && target.width.toLong() * target.height > MAX_IMAGE_PIXELS) {
+        if (!hasVideoDimensions && target.width.toLong() * target.height > MAX_IMAGE_PIXELS) {
             _messages.trySend(
                 app.getString(
                     R.string.error_pixel_limit,
@@ -372,7 +385,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             )
             return
         }
-        if (isVideoOutput) {
+        if (hasVideoDimensions) {
             target = target.toEven()
         }
 
@@ -389,10 +402,23 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val audioQuality = current.audioQuality
         val gifSpeed = current.gifSpeed
         val gifOutputFormat = current.gifOutputFormat
+        val videoOutputFormat = current.videoOutputFormat
 
         exportJob = viewModelScope.launch {
             try {
-                val result = if (isVideo) {
+                val result = if (isVideo && videoOutputFormat == VideoOutputFormat.GIF) {
+                    videoGifResizer.resize(
+                        mediaInfo = media,
+                        request = ImageResizeRequest(
+                            target = target,
+                            mode = mode,
+                            format = ImageFormat.GIF,
+                            quality = quality
+                        )
+                    ) { progress, stage ->
+                        updateProgress(progress, stage)
+                    }
+                } else if (isVideo) {
                     videoResizer.resize(
                         mediaInfo = media,
                         target = target,
@@ -514,6 +540,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             is OutOfMemoryError -> app.getString(R.string.error_out_of_memory)
             is GifProcessingException -> app.getString(R.string.error_gif_export)
             is GifVideoProcessingException -> app.getString(R.string.error_gif_video_export)
+            is VideoGifProcessingException -> app.getString(R.string.error_video_gif_export)
             is ImageDecodeException -> app.getString(R.string.error_decode_image)
             is ExportException -> app.getString(R.string.error_video_export)
             is SecurityException -> app.getString(R.string.error_save)

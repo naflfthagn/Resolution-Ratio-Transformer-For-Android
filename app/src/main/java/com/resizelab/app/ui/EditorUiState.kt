@@ -10,6 +10,7 @@ import com.resizelab.app.data.MediaInfo
 import com.resizelab.app.data.MediaKind
 import com.resizelab.app.data.ResolutionPreset
 import com.resizelab.app.data.ResizeMode
+import com.resizelab.app.data.VideoOutputFormat
 import com.resizelab.app.util.PixelSize
 
 sealed interface ExportStatus {
@@ -30,6 +31,7 @@ data class EditorUiState(
     val audioQuality: AudioQuality = AudioQuality.AUTO,
     val gifSpeed: GifSpeed = GifSpeed.NORMAL,
     val gifOutputFormat: GifOutputFormat = GifOutputFormat.GIF,
+    val videoOutputFormat: VideoOutputFormat = VideoOutputFormat.MP4,
     val quality: Int = 92,
     val exportStatus: ExportStatus = ExportStatus.Idle
 ) {
@@ -49,8 +51,12 @@ data class EditorUiState(
     val isVideo: Boolean
         get() = media?.kind == MediaKind.VIDEO
 
-    val isVideoOutput: Boolean
+    val hasVideoDimensions: Boolean
         get() = isVideo || (media?.isGif == true && gifOutputFormat == GifOutputFormat.MP4)
+
+    val isVideoOutput: Boolean
+        get() = (isVideo && videoOutputFormat == VideoOutputFormat.MP4) ||
+            (media?.isGif == true && gifOutputFormat == GifOutputFormat.MP4)
 
     val isExporting: Boolean
         get() = exportStatus is ExportStatus.Running

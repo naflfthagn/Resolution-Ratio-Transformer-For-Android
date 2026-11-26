@@ -69,6 +69,13 @@
     <string name="settings_video_summary">MP4 · %1$s</string>
     <string name="video_format_mp4">MP4 视频</string>
     <string name="video_codec_h264">H.264</string>
+    <string name="settings_video_gif_summary">GIF · 无音轨</string>
+    <string name="video_output_gif">GIF 动图</string>
+    <string name="video_output_gif_desc">无音轨 · 自动帧率</string>
+    <string name="video_gif_settings_desc">导出为循环 GIF，无音轨；默认约 10 FPS，长视频会自动降低帧率。</string>
+    <string name="error_video_gif_export">视频转 GIF 失败。设备可能不支持该视频编码或目标分辨率。</string>
+    <string name="output_format_expand">展开输出格式</string>
+    <string name="video_format_mp4_desc">H.264 视频封装</string>
     <string name="gif_output_gif">GIF 动图</string>
     <string name="gif_output_mp4">MP4 视频</string>
     <string name="gif_video_settings_desc">转换为无声 H.264 MP4 视频；透明区域会变为黑色，保留动画节奏与当前速度。</string>

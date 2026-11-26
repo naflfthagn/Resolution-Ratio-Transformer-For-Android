@@ -1,2 +1,2 @@
-b001c22aaac4af0db88debc1e08f64c05e52fa45cb4c3ea3878a2db54392ce13  ResizeLab-1.5.1.apk
-0da3747b5d1487b57fa89c9eaa6b3ab27bebbe9441615265eb36b836ece4a785  ResizeLab-1.5.1-source.zip
+3b3e440ca9bbe5e811c96358d00501dfaeee07ece15471e3f2925b5d206314f3  ResizeLab-1.6.0.apk
+9cbd16446e5df41208ed471bc926b7fd3729732a81de46dcaf145aaac1983d54  ResizeLab-1.6.0-source.zip

@@ -39,6 +39,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.LockOpen
 import androidx.compose.material.icons.rounded.Movie
@@ -52,6 +53,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -72,6 +74,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -107,6 +110,7 @@ import com.resizelab.app.data.MediaInfo
 import com.resizelab.app.data.MediaKind
 import com.resizelab.app.data.ResolutionPreset
 import com.resizelab.app.data.ResizeMode
+import com.resizelab.app.data.VideoOutputFormat
 import com.resizelab.app.media.ImagePreviewLoader
 import com.resizelab.app.ui.components.AppCard
 import com.resizelab.app.ui.components.AppCardShape
@@ -138,6 +142,7 @@ fun EditorScreen(
     onFormatSelected: (ImageFormat) -> Unit,
     onQualityChange: (Int) -> Unit,
     onAudioQualitySelected: (AudioQuality) -> Unit,
+    onVideoOutputSelected: (VideoOutputFormat) -> Unit,
     onGifSpeedSelected: (GifSpeed) -> Unit,
     onGifOutputSelected: (GifOutputFormat) -> Unit,
     onExport: () -> Unit,
@@ -226,6 +231,7 @@ fun EditorScreen(
                     onFormatSelected = onFormatSelected,
                     onQualityChange = onQualityChange,
                     onAudioQualitySelected = onAudioQualitySelected,
+                    onVideoOutputSelected = onVideoOutputSelected,
                     onGifSpeedSelected = onGifSpeedSelected,
                     onGifOutputSelected = onGifOutputSelected
                 )
@@ -247,7 +253,7 @@ fun EditorScreen(
 
 private fun isTargetValid(state: EditorUiState): Boolean {
     val target = state.targetSize ?: return false
-    return ResolutionMath.validateTarget(target, state.isVideoOutput) == null
+    return ResolutionMath.validateTarget(target, state.hasVideoDimensions) == null
 }
 
 @Composable
@@ -525,7 +531,7 @@ private fun ResolutionCard(
     val media = state.media ?: return
     val enabled = !state.isExporting
     val target = state.targetSize
-    val maxDimension = ResolutionMath.maxDimension(state.isVideoOutput)
+    val maxDimension = ResolutionMath.maxDimension(state.hasVideoDimensions)
     val sizeError = when {
         target == null -> stringResource(R.string.error_empty_size)
         target.width < ResolutionMath.MIN_DIMENSION ||
@@ -536,7 +542,7 @@ private fun ResolutionCard(
             ResolutionMath.MIN_DIMENSION,
             maxDimension
         )
-        !state.isVideoOutput &&
+        !state.hasVideoDimensions &&
             target.width.toLong() * target.height > ResolutionMath.MAX_IMAGE_PIXELS ->
             stringResource(
                 R.string.error_pixel_limit,
@@ -639,7 +645,7 @@ private fun ResolutionCard(
                     style = MaterialTheme.typography.labelSmall,
                     color = colors.error
                 )
-            } else if (state.isVideoOutput) {
+            } else if (state.hasVideoDimensions) {
                 Spacer(Modifier.height(4.dp))
                 Text(
                     text = stringResource(R.string.video_even_hint),
@@ -749,6 +755,7 @@ private fun ExportSettingsCard(
     onFormatSelected: (ImageFormat) -> Unit,
     onQualityChange: (Int) -> Unit,
     onAudioQualitySelected: (AudioQuality) -> Unit,
+    onVideoOutputSelected: (VideoOutputFormat) -> Unit,
     onGifSpeedSelected: (GifSpeed) -> Unit,
     onGifOutputSelected: (GifOutputFormat) -> Unit
 ) {
@@ -772,6 +779,8 @@ private fun ExportSettingsCard(
             )
             else -> formatLabel(state.imageFormat)
         }
+    } else if (state.videoOutputFormat == VideoOutputFormat.GIF) {
+        stringResource(R.string.settings_video_gif_summary)
     } else {
         val audioSummary = when {
             !media.hasAudio -> stringResource(R.string.settings_no_audio)
@@ -814,14 +823,26 @@ private fun ExportSettingsCard(
                         onGifOutputSelected = onGifOutputSelected
                     )
                 } else {
-                    VideoFormatRow()
-                    Spacer(Modifier.height(14.dp))
-                    VideoAudioSettings(
-                        media = media,
-                        selected = state.audioQuality,
+                    VideoFormatSelector(
+                        selected = state.videoOutputFormat,
                         enabled = enabled,
-                        onSelected = onAudioQualitySelected
+                        onSelected = onVideoOutputSelected
                     )
+                    Spacer(Modifier.height(14.dp))
+                    if (state.videoOutputFormat == VideoOutputFormat.MP4) {
+                        VideoAudioSettings(
+                            media = media,
+                            selected = state.audioQuality,
+                            enabled = enabled,
+                            onSelected = onAudioQualitySelected
+                        )
+                    } else {
+                        Text(
+                            text = stringResource(R.string.video_gif_settings_desc),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.onSurfaceVariant
+                        )
+                    }
                 }
             }
         }
@@ -972,8 +993,13 @@ private fun ImageSettings(
 }
 
 @Composable
-private fun VideoFormatRow() {
+private fun VideoFormatSelector(
+    selected: VideoOutputFormat,
+    enabled: Boolean,
+    onSelected: (VideoOutputFormat) -> Unit
+) {
     val colors = MaterialTheme.colorScheme
+    var expanded by rememberSaveable { mutableStateOf(false) }
     Text(
         text = stringResource(R.string.output_format_label),
         style = MaterialTheme.typography.labelMedium,
@@ -981,7 +1007,10 @@ private fun VideoFormatRow() {
     )
     Spacer(Modifier.height(7.dp))
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(AppControlShape)
+            .clickable(enabled = enabled) { expanded = !expanded },
         shape = AppControlShape,
         color = colors.surfaceVariant.copy(alpha = 0.30f),
         border = BorderStroke(1.dp, colors.outlineVariant)
@@ -1000,16 +1029,108 @@ private fun VideoFormatRow() {
             )
             Spacer(Modifier.width(8.dp))
             Text(
-                text = stringResource(R.string.video_format_mp4),
+                text = stringResource(
+                    if (selected == VideoOutputFormat.MP4) {
+                        R.string.video_format_mp4
+                    } else {
+                        R.string.video_output_gif
+                    }
+                ),
                 style = MaterialTheme.typography.labelMedium,
                 color = colors.onSurface,
                 modifier = Modifier.weight(1f)
             )
             Text(
-                text = stringResource(R.string.video_codec_h264),
+                text = stringResource(
+                    if (selected == VideoOutputFormat.MP4) {
+                        R.string.video_codec_h264
+                    } else {
+                        R.string.settings_no_audio
+                    }
+                ),
                 style = MaterialTheme.typography.labelSmall,
                 color = colors.onSurfaceVariant
             )
+            Spacer(Modifier.width(4.dp))
+            Icon(
+                imageVector = Icons.Rounded.KeyboardArrowDown,
+                contentDescription = stringResource(R.string.output_format_expand),
+                tint = colors.onSurfaceVariant,
+                modifier = Modifier
+                    .size(20.dp)
+                    .rotate(if (expanded) 180f else 0f)
+            )
+        }
+    }
+    AnimatedVisibility(
+        visible = expanded,
+        enter = expandVertically() + fadeIn(),
+        exit = shrinkVertically() + fadeOut()
+    ) {
+        Column {
+            Spacer(Modifier.height(8.dp))
+            VideoOutputFormat.entries.forEach { format ->
+                val isSelected = format == selected
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(AppControlShape)
+                        .clickable(enabled = enabled) {
+                            onSelected(format)
+                            expanded = false
+                        },
+                    shape = AppControlShape,
+                    color = if (isSelected) {
+                        colors.primaryContainer.copy(alpha = 0.45f)
+                    } else {
+                        colors.surfaceVariant.copy(alpha = 0.18f)
+                    },
+                    border = BorderStroke(
+                        1.dp,
+                        if (isSelected) colors.primary.copy(alpha = 0.55f)
+                        else colors.outlineVariant
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = isSelected,
+                            onClick = null,
+                            enabled = enabled
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(
+                                    if (format == VideoOutputFormat.MP4) {
+                                        R.string.video_format_mp4
+                                    } else {
+                                        R.string.video_output_gif
+                                    }
+                                ),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = colors.onSurface
+                            )
+                            Text(
+                                text = stringResource(
+                                    if (format == VideoOutputFormat.MP4) {
+                                        R.string.video_format_mp4_desc
+                                    } else {
+                                        R.string.video_output_gif_desc
+                                    }
+                                ),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = colors.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+            }
         }
     }
 }

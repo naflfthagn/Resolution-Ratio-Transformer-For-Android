@@ -52,3 +52,8 @@ enum class GifOutputFormat {
     GIF,
     MP4
 }
+
+enum class VideoOutputFormat {
+    MP4,
+    GIF
+}
